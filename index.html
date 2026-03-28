@@ -111,6 +111,18 @@
                         </div>
 
                         <div id="pdf-settings" class="hidden flex-1 flex flex-col">
+                            
+                            <div class="border border-dashed border-gray-300 rounded p-4 text-center hover:bg-gray-50 transition-colors mb-6">
+                                <div class="cursor-pointer" onclick="document.getElementById('font-input').click()">
+                                    <i class="fas fa-font text-blue-500 mb-2"></i>
+                                    <p class="text-xs font-medium text-gray-700" id="font-upload-text">Upload Custom Font (.TTF) <br/> <span class="text-gray-400 font-normal">*Optional, required for Gujarati or Hindi*</span></p>
+                                    <input type="file" id="font-input" accept=".ttf,.otf" class="hidden" onchange="handleFontUpload(event)">
+                                </div>
+                                <div class="mt-3 pt-3 border-t border-gray-200">
+                                    <button onclick="autoLoadGujaratiFont(event)" class="text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 py-1.5 px-3 rounded-full transition-colors"><i class="fas fa-download mr-1"></i> Auto-Load Gujarati Font</button>
+                                </div>
+                            </div>
+
                             <div class="flex justify-between items-center mb-3">
                                 <h3 class="text-md font-medium text-gray-800">Add Custom Fields</h3>
                                 <select id="zoom-selector" class="border border-gray-300 p-1 rounded text-xs text-gray-700 bg-white cursor-pointer" onchange="changeZoom(event)">
@@ -122,6 +134,11 @@
                                 </select>
                             </div>
                             <p class="text-xs text-gray-500 mb-4">Select a column from your uploaded data, choose a font size, and add the text box to the canvas. Drag to position.</p>
+
+                            <label class="flex items-center text-xs text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded mb-4 cursor-pointer hover:bg-blue-100 transition">
+                                <input type="checkbox" id="auto-translate-gu" class="mr-2 cursor-pointer w-4 h-4"> 
+                                <span><strong>Auto-Translate to Gujarati</strong> (Powered by Google)</span>
+                            </label>
                             
                             <div class="flex space-x-2 mb-4">
                                 <select id="column-selector" class="flex-1 border p-2 rounded text-sm text-gray-700"></select>
@@ -210,11 +227,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <!-- 3. PDF Lib (for writing/generating the finalized PDFs locally) -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <script src="https://unpkg.com/@pdf-lib/fontkit@0.0.4/dist/fontkit.umd.min.js"></script>
     
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         
-        let appData = { contacts: [], headers: [], fieldConfigs: [], templateB64: null };
+        let appData = { contacts: [], headers: [], fieldConfigs: [], templateB64: null, customFontB64: null };
         let activeDragField = null;
         let startX=0, startY=0;
         let pageDims = [];
@@ -230,6 +248,12 @@
             }
             const storedFields = localStorage.getItem('invite_fields');
             if (storedFields) appData.fieldConfigs = JSON.parse(storedFields);
+
+            const translateMode = localStorage.getItem('invite_auto_translate');
+            if (translateMode === 'true') {
+                const el = document.getElementById('auto-translate-gu');
+                if (el) el.checked = true;
+            }
             
             const storedZoom = localStorage.getItem('invite_zoom');
             if (storedZoom) {
@@ -243,6 +267,14 @@
             if (storedTemplate) {
                 appData.templateB64 = storedTemplate;
                 document.getElementById('pdf-upload-text').textContent = "Template Loaded! Click to replace.";
+            }
+
+            const storedFont = localStorage.getItem('invite_custom_font');
+            if (storedFont) {
+                appData.customFontB64 = storedFont;
+                loadCustomFontToDOM(storedFont); // Background load
+                const el = document.getElementById('font-upload-text');
+                if(el) el.innerHTML = "Custom Font Loaded!<br/><span class='text-gray-400 font-normal'>Click to replace.</span>";
             }
 
             fetchStats();
@@ -346,6 +378,72 @@
                 bytes[i] = binary_string.charCodeAt(i);
             }
             return bytes.buffer;
+        }
+
+        async function loadCustomFontToDOM(b64Data) {
+            try {
+                const fontUrl = 'data:font/ttf;base64,' + b64Data;
+                const newFont = new FontFace('CustomPdfFont', `url(${fontUrl})`);
+                await newFont.load();
+                document.fonts.add(newFont);
+                console.log("Custom font natively loaded to DOM for Canvas shaping");
+            } catch(e) {
+                console.error("Failed to load font to DOM:", e);
+            }
+        }
+
+        function handleFontUpload(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const b64 = e.target.result.split(',')[1];
+                appData.customFontB64 = b64;
+                try {
+                    localStorage.setItem('invite_custom_font', b64);
+                } catch (err) {
+                    console.warn("Font size exceeds local storage constraints.", err);
+                }
+                await loadCustomFontToDOM(b64);
+                const el = document.getElementById('font-upload-text');
+                if(el) el.innerHTML = "Custom Font Loaded Successfully!<br/><span class='text-gray-400 font-normal'>" + file.name + "</span>";
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function autoLoadGujaratiFont(event) {
+            const btn = event.currentTarget;
+            const oldHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Downloading...';
+            btn.disabled = true;
+            try {
+                const response = await fetch("https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/hindvadodara/HindVadodara-Regular.ttf");
+                if(!response.ok) throw new Error("HTTP " + response.status);
+                const arrayBuffer = await response.arrayBuffer();
+                
+                let binary = '';
+                const bytes = new Uint8Array(arrayBuffer);
+                const len = bytes.byteLength;
+                for (let i = 0; i < len; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                const b64 = window.btoa(binary);
+                
+                appData.customFontB64 = b64;
+                try { localStorage.setItem('invite_custom_font', b64); } catch(e){}
+                
+                await loadCustomFontToDOM(b64);
+                document.getElementById('font-upload-text').innerHTML = "Gujarati Auto-Font Loaded Successfully!<br/><span class='text-gray-400 font-normal'>HindVadodara TTF</span>";
+                btn.innerHTML = '<i class="fas fa-check mr-1"></i> Loaded Ready';
+                btn.classList.replace('bg-blue-50', 'bg-green-50');
+                btn.classList.replace('text-blue-600', 'text-green-600');
+            } catch (err) {
+                console.error("Auto load failed", err);
+                alert("Failed to download font: " + err.message);
+                btn.innerHTML = oldHtml;
+                btn.disabled = false;
+            }
         }
 
         function handlePDFUpload(event) {
@@ -453,27 +551,54 @@
             div.style.borderColor = color;
             div.textContent = `{${col}}`;
             
-            div.onmousedown = (e) => {
+            const startDrag = (e) => {
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
                 const fieldObj = appData.fieldConfigs.find(f => f.id === id);
                 activeDragField = { element: div, fieldObj: fieldObj };
-                startX = e.clientX - div.offsetLeft;
-                startY = e.clientY - div.offsetTop;
+                startX = clientX - div.offsetLeft;
+                startY = clientY - div.offsetTop;
             };
+            div.onmousedown = startDrag;
+            div.ontouchstart = startDrag;
             
             document.getElementById('fields-container').appendChild(div);
         }
 
-        document.addEventListener('mousemove', (e) => {
+        const doDrag = (e) => {
             if(!activeDragField) return;
-            // Bound to container optionally
-            const newX = e.clientX - startX;
-            const newY = e.clientY - startY;
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const newX = clientX - startX;
+            const newY = clientY - startY;
             activeDragField.element.style.left = `${newX}px`;
             activeDragField.element.style.top = `${newY}px`;
             activeDragField.fieldObj.x = Math.round(newX);
             activeDragField.fieldObj.y = Math.round(newY);
-        });
-        document.addEventListener('mouseup', () => { activeDragField = null; });
+            
+            const xInput = document.getElementById(`x-pos-${activeDragField.fieldObj.id}`);
+            const yInput = document.getElementById(`y-pos-${activeDragField.fieldObj.id}`);
+            if(xInput) xInput.value = Math.round(newX);
+            if(yInput) yInput.value = Math.round(newY);
+        };
+        const stopDrag = () => { activeDragField = null; };
+
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('touchmove', doDrag, {passive: false});
+        document.addEventListener('mouseup', stopDrag);
+        document.addEventListener('touchend', stopDrag);
+
+        function updateFieldCoords(id, axis, value) {
+            const fieldObj = appData.fieldConfigs.find(f => f.id === id);
+            if(fieldObj) {
+                fieldObj[axis] = parseInt(value) || 0;
+                const div = document.getElementById(`field-${id}`);
+                if(div) {
+                    if (axis === 'x') div.style.left = `${fieldObj.x}px`;
+                    if (axis === 'y') div.style.top = `${fieldObj.y}px`;
+                }
+            }
+        }
 
         function removeField(id) {
             appData.fieldConfigs = appData.fieldConfigs.filter(f => f.id !== id);
@@ -485,12 +610,19 @@
         function renderFieldList() {
             const list = document.getElementById('field-list');
             list.innerHTML = appData.fieldConfigs.map(f => `
-                <div class="flex justify-between items-center bg-white p-2 border rounded text-sm mt-2 shadow-sm pointer-events-auto">
-                    <div class="flex items-center space-x-2">
-                        <div style="width:16px;height:16px;border-radius:50%;background-color:${f.color || '#000000'};border:1px solid #ccc;"></div>
-                        <span><strong>${f.columnName}</strong> (Size ${f.fontSize}px)</span>
+                <div class="flex flex-col bg-white p-2 border rounded text-sm mt-2 shadow-sm pointer-events-auto gap-2">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center space-x-2">
+                            <div style="width:12px;height:12px;border-radius:50%;background-color:${f.color || '#000000'};border:1px solid #ccc;"></div>
+                            <span><strong>${f.columnName}</strong> (${Math.round(f.fontSize)}px)</span>
+                        </div>
+                        <button class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded text-xs" onclick="removeField(${f.id})"><i class="fas fa-trash"></i></button>
                     </div>
-                    <button class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded" onclick="removeField(${f.id})"><i class="fas fa-trash"></i></button>
+                    <div class="flex space-x-3 text-xs bg-gray-50 p-1 rounded items-center">
+                        <span class="text-gray-500 font-medium ml-1"><i class="fas fa-arrows-alt"></i> Box Pos:</span>
+                        <div class="flex items-center space-x-1"><label>X</label><input type="number" id="x-pos-${f.id}" value="${Math.round(f.x)}" class="w-14 border rounded px-1 py-0.5 text-center" onchange="updateFieldCoords(${f.id}, 'x', this.value)"></div>
+                        <div class="flex items-center space-x-1"><label>Y</label><input type="number" id="y-pos-${f.id}" value="${Math.round(f.y)}" class="w-14 border rounded px-1 py-0.5 text-center" onchange="updateFieldCoords(${f.id}, 'y', this.value)"></div>
+                    </div>
                 </div>
             `).join('');
         }
@@ -498,6 +630,8 @@
         function saveTemplateSettings() {
             try {
                 localStorage.setItem('invite_fields', JSON.stringify(appData.fieldConfigs));
+                const transToggle = document.getElementById('auto-translate-gu');
+                if (transToggle) localStorage.setItem('invite_auto_translate', transToggle.checked.toString());
                 alert('Layout settings mapped and saved to Local Storage!');
             } catch (err) {
                 console.warn("Layout too complex to save locally", err);
@@ -555,6 +689,15 @@
                 // 2. Load template document
                 const arrayBuffer = _base64ToArrayBuffer(appData.templateB64);
                 const pdfDoc = await PDFDocument.load(arrayBuffer);
+                
+                // Custom Font Integration
+                pdfDoc.registerFontkit(fontkit);
+                let customFontRef = null;
+                if (appData.customFontB64) {
+                    const fontBytes = _base64ToArrayBuffer(appData.customFontB64);
+                    customFontRef = await pdfDoc.embedFont(fontBytes);
+                }
+
                 const pages = pdfDoc.getPages();
                 
                 // Find contact data
@@ -562,8 +705,21 @@
 
                 // 3. Render each dynamic field onto the PDF natively in-browser
                 for (const field of appData.fieldConfigs) {
-                    const value = contact[field.columnName];
-                    if (value) {
+                    const rawValue = contact[field.columnName];
+                    if (rawValue !== undefined && rawValue !== null && rawValue !== '') {
+                        let strValue = String(rawValue);
+                        
+                        const autoTranslate = document.getElementById('auto-translate-gu') && document.getElementById('auto-translate-gu').checked;
+                        if (autoTranslate) {
+                            try {
+                                const trRes = await fetch(`https://inputtools.google.com/request?text=${encodeURIComponent(strValue)}&itc=gu-t-i0-und&num=1`);
+                                const trData = await trRes.json();
+                                if(trData[0] === 'SUCCESS' && trData[1] && trData[1][0] && trData[1][0][1]) {
+                                    strValue = trData[1][0][1][0];
+                                }
+                            } catch(e) { console.warn("Auto-translation failed:", e); }
+                        }
+
                         const pdfScale = currentPdfScale;
                         
                         // Find which page the field falls into
@@ -591,12 +747,61 @@
                         const actualY = height - (yOffsetInPage / pdfScale) - (field.fontSize / pdfScale);
                         const col = hexToRgbVals(field.color || '#000000');
 
-                        targetPage.drawText(value, {
-                            x: actualX,
-                            y: actualY,
-                            size: field.fontSize / pdfScale,
-                            color: rgb(col.r, col.g, col.b),
-                        });
+                        // Check if we have Custom Font loaded via DOM (indicates we should use Canvas shaping for complex scripts like Gujarati)
+                        if (customFontRef && document.fonts.check("12px CustomPdfFont")) {
+                            const exportScale = 4; // High DPI for crispness
+                            const pxSize = field.fontSize * exportScale;
+                            const padding = pxSize * 0.5; // Padding to prevent cutoff for complex glyphs
+                            
+                            const canvas = document.createElement('canvas');
+                            const ctx = canvas.getContext('2d');
+                            ctx.font = `${pxSize}px CustomPdfFont, sans-serif`;
+                            
+                            const metrics = ctx.measureText(strValue);
+                            const textWidth = Math.max(metrics.width, 1);
+                            
+                            canvas.width = textWidth + padding * 2;
+                            canvas.height = pxSize + padding * 2;
+                            
+                            // Reset font after resize!
+                            ctx.font = `${pxSize}px CustomPdfFont, sans-serif`;
+                            ctx.fillStyle = field.color || '#000000';
+                            ctx.textBaseline = 'alphabetic'; // Reliable baseline drawing
+                            
+                            const drawX = padding;
+                            const drawY = canvas.height - padding; // Baseline near bottom
+                            
+                            ctx.fillText(strValue, drawX, drawY);
+                            
+                            const pngDataUrl = canvas.toDataURL('image/png');
+                            const pngImage = await pdfDoc.embedPng(pngDataUrl);
+                            
+                            const finalW = canvas.width / exportScale / pdfScale;
+                            const finalH = canvas.height / exportScale / pdfScale;
+                            
+                            const adjustedX = actualX - (padding / exportScale / pdfScale);
+                            const adjustedY = actualY - (padding / exportScale / pdfScale);
+                            
+                            targetPage.drawImage(pngImage, {
+                                x: adjustedX, 
+                                y: adjustedY, 
+                                width: finalW, 
+                                height: finalH 
+                            });
+                        } else {
+                            const textOptions = {
+                                x: actualX,
+                                y: actualY,
+                                size: field.fontSize / pdfScale,
+                                color: rgb(col.r, col.g, col.b),
+                            };
+                            
+                            if (customFontRef) {
+                                textOptions.font = customFontRef;
+                            }
+
+                            targetPage.drawText(strValue, textOptions);
+                        }
                     }
                 }
 
