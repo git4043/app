@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invitation Master - Serverless Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .nav-link.active { background-color: #eff6ff; color: #2563eb; border-right: 3px solid #2563eb; }
+        .nav-link:hover:not(.active) { background-color: #f1f5f9; }
+        .draggable-field { 
+            position: absolute; border: 2px dashed #3b82f6; background-color: rgba(59, 130, 246, 0.2); 
+            cursor: move; color: #1e3a8a; font-weight: bold; padding: 2px 4px; white-space: nowrap; z-index: 10; user-select: none; border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="flex h-screen overflow-hidden">
+
+    <aside class="w-64 bg-white border-r border-gray-200 flex flex-col transition-all duration-300">
+        <div class="h-16 flex items-center px-6 border-b border-gray-200 items-center justify-between">
+            <div class="flex items-center">
+                <i class="fas fa-paper-plane text-blue-600 text-xl mr-3"></i>
+                <span class="text-xl font-bold text-gray-800">InviteMaster</span>
+            </div>
+            <span class="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded uppercase">Serverless</span>
+        </div>
+        
+        <nav class="flex-1 overflow-y-auto py-4">
+            <ul class="space-y-1">
+                <li><a href="#" onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-link active flex items-center px-6 py-3 text-gray-600 transition-colors"><i class="fas fa-home w-5 mr-3 text-center"></i><span class="font-medium">Dashboard</span></a></li>
+                <li><a href="#" onclick="switchTab('upload')" id="nav-upload" class="nav-link flex items-center px-6 py-3 text-gray-600 transition-colors"><i class="fas fa-file-excel w-5 mr-3 text-center"></i><span class="font-medium">Upload Data</span></a></li>
+                <li><a href="#" onclick="switchTab('template')" id="nav-template" class="nav-link flex items-center px-6 py-3 text-gray-600 transition-colors"><i class="fas fa-file-pdf w-5 mr-3 text-center"></i><span class="font-medium">PDF Template</span></a></li>
+                <li><a href="#" onclick="switchTab('campaign')" id="nav-campaign" class="nav-link flex items-center px-6 py-3 text-gray-600 transition-colors"><i class="fab fa-whatsapp w-5 mr-3 text-center"></i><span class="font-medium">Send Individual</span></a></li>
+            </ul>
+        </nav>
+
+        <!-- Wipe Local Storage Button -->
+        <div class="p-4 border-t border-gray-200">
+            <button onclick="wipeData()" class="w-full text-xs text-red-500 hover:text-red-700 flex items-center justify-center p-2 rounded hover:bg-red-50 transition-colors border border-transparent hover:border-red-200">
+                <i class="fas fa-trash-alt mr-2"></i> Wipe Local Data Setup
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+        <header class="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8">
+            <h1 id="page-title" class="text-xl font-semibold text-gray-800">Dashboard</h1>
+        </header>
+
+        <div class="flex-1 overflow-auto bg-gray-50 p-8">
+            
+            <!-- Dashboard View -->
+            <div id="view-dashboard" class="page-view animate-fade-in block">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex justify-between items-center">
+                        <div><p class="text-sm font-medium text-gray-500 mb-1">Total Contacts</p><h3 class="text-2xl font-bold text-gray-800" id="stat-total">0</h3></div>
+                        <div class="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-users text-xl"></i></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex justify-between items-center">
+                        <div><p class="text-sm font-medium text-gray-500 mb-1">Sent PDFs</p><h3 class="text-2xl font-bold text-green-600" id="stat-sent">0</h3></div>
+                        <div class="w-12 h-12 rounded-full bg-green-50 flex items-center justify-center text-green-600"><i class="fas fa-check text-xl"></i></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex justify-between items-center">
+                        <div><p class="text-sm font-medium text-gray-500 mb-1">Failed</p><h3 class="text-2xl font-bold text-red-600" id="stat-failed">0</h3></div>
+                        <div class="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center text-red-600"><i class="fas fa-times text-xl"></i></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex justify-between items-center">
+                        <div><p class="text-sm font-medium text-gray-500 mb-1">Pending</p><h3 class="text-2xl font-bold text-orange-500" id="stat-pending">0</h3></div>
+                        <div class="w-12 h-12 rounded-full bg-orange-50 flex items-center justify-center text-orange-500"><i class="fas fa-clock text-xl"></i></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Upload View -->
+            <div id="view-upload" class="page-view animate-fade-in hidden">
+                <div class="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+                    <h2 class="text-xl font-semibold text-gray-800 mb-2">Upload Data</h2>
+                    <p class="text-gray-500 mb-6 text-sm">Upload an Excel (.xlsx, .xls) or CSV file containing your contacts. Data is stored entirely locally in your browser!</p>
+                    
+                    <div class="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:bg-gray-50 transition-colors cursor-pointer" onclick="document.getElementById('csv-input').click()">
+                        <i class="fas fa-cloud-upload-alt text-4xl text-blue-500 mb-4"></i>
+                        <h3 class="text-lg font-medium text-gray-700">Click to upload Data File</h3>
+                        <p class="text-sm text-gray-500 mt-2">Excel/XML/CSV files only.</p>
+                        <input type="file" id="csv-input" accept=".csv, .xlsx, .xls, .xml" class="hidden" onchange="handleCSVUpload(event)">
+                    </div>
+
+                    <div id="csv-preview-container" class="mt-8 hidden">
+                        <div class="mt-4 flex justify-between items-center">
+                            <span class="text-sm font-medium text-green-600" id="detected-columns"></span>
+                            <button class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors shadow-sm" onclick="saveContacts()">
+                                Save to Browser Storage
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Template View -->
+            <div id="view-template" class="page-view animate-fade-in hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1 bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col">
+                        <h2 class="text-xl font-semibold text-gray-800 mb-4">PDF Layout Engine</h2>
+                        
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer mb-6" onclick="document.getElementById('pdf-input').click()" id="pdf-upload-box">
+                            <i class="fas fa-file-pdf text-3xl text-red-500 mb-3"></i>
+                            <p class="text-sm font-medium text-gray-700" id="pdf-upload-text">Upload PDF Template</p>
+                            <input type="file" id="pdf-input" accept=".pdf" class="hidden" onchange="handlePDFUpload(event)">
+                        </div>
+
+                        <div id="pdf-settings" class="hidden flex-1 flex flex-col">
+                            <div class="flex justify-between items-center mb-3">
+                                <h3 class="text-md font-medium text-gray-800">Add Custom Fields</h3>
+                                <select id="zoom-selector" class="border border-gray-300 p-1 rounded text-xs text-gray-700 bg-white cursor-pointer" onchange="changeZoom(event)">
+                                    <option value="1.0">Zoom 1.0x</option>
+                                    <option value="1.5" selected>Zoom 1.5x</option>
+                                    <option value="2.0">Zoom 2.0x</option>
+                                    <option value="2.5">Zoom 2.5x</option>
+                                    <option value="3.0">Zoom 3.0x</option>
+                                </select>
+                            </div>
+                            <p class="text-xs text-gray-500 mb-4">Select a column from your uploaded data, choose a font size, and add the text box to the canvas. Drag to position.</p>
+                            
+                            <div class="flex space-x-2 mb-4">
+                                <select id="column-selector" class="flex-1 border p-2 rounded text-sm text-gray-700"></select>
+                                <input type="number" id="global-font-size" value="24" class="w-16 border p-2 rounded text-sm text-gray-700" title="Font Size" placeholder="pt">
+                                <input type="color" id="global-font-color" value="#000000" class="w-12 h-10 border rounded cursor-pointer p-0" title="Text Color">
+                                <button class="bg-blue-100 text-blue-600 px-3 py-2 rounded hover:bg-blue-200" onclick="addFieldToCanvas()"><i class="fas fa-plus"></i></button>
+                            </div>
+                            
+                            <div id="field-list" class="space-y-2 flex-1 mb-4">
+                                <!-- List of added fields rendered here -->
+                            </div>
+                            
+                            <div class="mt-auto">
+                                <button class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors" onclick="saveTemplateSettings()">
+                                    Save Template Layout
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="lg:col-span-2 bg-gray-200 rounded-xl overflow-hidden relative shadow-inner flex flex-col justify-start items-center p-4 bg-stripes-gray" style="min-height: 600px; overflow-y: auto;" id="pdf-preview-container">
+                        <div class="relative inline-flex flex-col mx-auto" id="canvas-wrapper">
+                            <!-- Dynamic canvases injected here via JS -->
+                            <div id="fields-container" class="absolute inset-0 pointer-events-none"></div>
+                        </div>
+                        
+                        <div id="pdf-placeholder" class="text-gray-400 flex flex-col items-center mt-32">
+                            <i class="fas fa-file-invoice text-5xl mb-3 opacity-50"></i>
+                            <p>Upload a PDF to render canvas</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Campaign View -->
+            <div id="view-campaign" class="page-view animate-fade-in hidden">
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-8">
+                    <div class="flex justify-between items-center mb-6">
+                        <div>
+                            <h2 class="text-xl font-semibold text-gray-800">Individual Sending Panel</h2>
+                            <p class="text-gray-500 text-sm mt-1">Generate a custom PDF entirely on your device and launch native WhatsApp sharing!</p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6 p-4 bg-gray-50 border rounded-lg">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Message Payload</label>
+                        <textarea id="whatsapp-message" rows="3" class="w-full border-gray-300 border rounded-md shadow-sm p-3 text-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Dear user, please find attached..."></textarea>
+                        
+                        <div class="mt-4 border-t pt-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Mobile Sending Strategy</label>
+                            <div class="flex items-center space-x-4">
+                                <label class="flex items-center text-sm text-gray-600">
+                                    <input type="radio" name="sendMode" value="autoAttach" class="mr-2"> Smart Share (Auto-attaches PDF, manually select contact)
+                                </label>
+                                <label class="flex items-center text-sm text-gray-600">
+                                    <input type="radio" name="sendMode" value="directChat" class="mr-2" checked> Direct Chat (Auto-opens Exact Number, manually attach PDF)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto shadow rounded-lg border">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact Name</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Number</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white divide-y divide-gray-200" id="contacts-list-body">
+                                <tr><td colspan="4" class="text-center py-8 text-gray-500">No contacts loaded.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Essential Static Architecture Scripts -->
+    <!-- 1. Excel/CSV parser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- 2. PDF viewer (for layout and dragging) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- 3. PDF Lib (for writing/generating the finalized PDFs locally) -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        let appData = { contacts: [], headers: [], fieldConfigs: [], templateB64: null };
+        let activeDragField = null;
+        let startX=0, startY=0;
+        let pageDims = [];
+
+        const viewTitles = { 'dashboard': 'Dashboard', 'upload': 'Upload Contacts', 'template': 'Template Layout', 'campaign': 'Send Individual' };
+        
+        // --- 1. Boot up sequence & Local Storage ---
+        function boot() {
+            const storedContacts = localStorage.getItem('invite_contacts');
+            if (storedContacts) {
+                appData.contacts = JSON.parse(storedContacts);
+                if(appData.contacts.length > 0) appData.headers = Object.keys(appData.contacts[0]);
+            }
+            const storedFields = localStorage.getItem('invite_fields');
+            if (storedFields) appData.fieldConfigs = JSON.parse(storedFields);
+            
+            const storedZoom = localStorage.getItem('invite_zoom');
+            if (storedZoom) {
+                currentPdfScale = parseFloat(storedZoom);
+                const zoomSel = document.getElementById('zoom-selector');
+                if (zoomSel) {
+                    zoomSel.value = currentPdfScale % 1 === 0 ? currentPdfScale + ".0" : currentPdfScale.toString();
+                }
+            }
+            const storedTemplate = localStorage.getItem('invite_template');
+            if (storedTemplate) {
+                appData.templateB64 = storedTemplate;
+                document.getElementById('pdf-upload-text').textContent = "Template Loaded! Click to replace.";
+            }
+
+            fetchStats();
+            populateColumnSelector();
+            if(appData.templateB64) renderPDFfromBase64(appData.templateB64);
+        }
+
+        window.onload = boot;
+
+        function wipeData() {
+            if(confirm('Are you sure you want to wipe all local data? This cannot be undone.')) {
+                localStorage.clear();
+                window.location.reload();
+            }
+        }
+
+        function switchTab(tabId) {
+            ['dashboard', 'upload', 'template', 'campaign'].forEach(view => {
+                document.getElementById(`view-${view}`).classList.add('hidden');
+                document.getElementById(`view-${view}`).classList.remove('block');
+                if(document.getElementById(`nav-${view}`)) document.getElementById(`nav-${view}`).classList.remove('active');
+            });
+            document.getElementById(`view-${tabId}`).classList.remove('hidden');
+            document.getElementById(`view-${tabId}`).classList.add('block');
+            if(document.getElementById(`nav-${tabId}`)) document.getElementById(`nav-${tabId}`).classList.add('active');
+            document.getElementById('page-title').textContent = viewTitles[tabId];
+
+            if(tabId === 'campaign') loadContactsList();
+            if(tabId === 'template') populateColumnSelector();
+            fetchStats();
+        }
+
+        function fetchStats() {
+            const total = appData.contacts.length;
+            const sent = appData.contacts.filter(c => c._status === 'Sent').length;
+            const failed = appData.contacts.filter(c => c._status === 'Failed').length;
+            const pending = total - sent - failed;
+
+            document.getElementById('stat-total').textContent = total;
+            document.getElementById('stat-sent').textContent = sent;
+            document.getElementById('stat-failed').textContent = failed;
+            document.getElementById('stat-pending').textContent = pending;
+        }
+
+        // --- 2. Data Upload Module ---
+        function handleCSVUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], {defval: ""});
+                
+                if(jsonData && jsonData.length > 0) {
+                    const payload = jsonData.map((row, index) => {
+                        let newRow = { _id: index, _status: 'Pending' };
+                        for(let key in row) newRow[key] = String(row[key]);
+                        // Ensure Name and ContactNumber fallbacks exist for Dashboard table view
+                        newRow._name = newRow.Name || newRow.name || newRow.NAME || "Unknown";
+                        newRow._number = newRow.ContactNumber || newRow.Mobile || newRow.Phone || newRow.number || "";
+                        return newRow;
+                    });
+
+                    appData.contacts = payload;
+                    appData.headers = Object.keys(payload[0]).filter(k => !k.startsWith('_'));
+                    
+                    document.getElementById('detected-columns').textContent = `Detected ${appData.contacts.length} rows and Columns: ${appData.headers.join(', ')}`;
+                    document.getElementById('csv-preview-container').classList.remove('hidden');
+                    populateColumnSelector();
+                } else alert('No data found in the file.');
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function saveContacts() {
+            if(!appData.contacts.length) return alert('No contacts valid.');
+            // Save locally instead of hitting DB server
+            try {
+                localStorage.setItem('invite_contacts', JSON.stringify(appData.contacts));
+                alert(`${appData.contacts.length} records saved securely in your Browser's LocalStorage!`);
+            } catch (err) {
+                console.warn("Contacts too large for local storage", err);
+                alert(`${appData.contacts.length} records loaded temporarily into session memory.`);
+            }
+            fetchStats();
+        }
+
+        function populateColumnSelector() {
+            const select = document.getElementById('column-selector');
+            select.innerHTML = appData.headers.map(h => `<option value="${h}">${h}</option>`).join('');
+        }
+
+        // --- 3. Layout Engine Module ---
+        async function _base64ToArrayBuffer(base64) {
+            const res = await fetch("data:application/pdf;base64," + base64);
+            return await res.arrayBuffer();
+        }
+
+        function handlePDFUpload(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                const dataUrl = e.target.result;
+                const b64 = dataUrl.split(',')[1];
+                appData.templateB64 = b64;
+                try {
+                    localStorage.setItem('invite_template', b64);
+                } catch (err) {
+                    console.warn("Template too large for local storage. Stored in session memory only.", err);
+                    alert("Note: PDF size exceeds local storage constraints. It is temporarily loaded for this session but will vanish upon manual page refresh.");
+                }
+                document.getElementById('pdf-upload-text').textContent = "Template Loaded! Click to replace.";
+                renderPDFfromBase64(b64);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        let currentPdfScale = 1.5;
+
+        function changeZoom(event) {
+            const newScale = parseFloat(event.target.value);
+            const ratio = newScale / currentPdfScale;
+            currentPdfScale = newScale;
+            
+            try { localStorage.setItem('invite_zoom', currentPdfScale.toString()); } catch(e) {}
+            
+            // Adjust all existing fields proportionally so they remain in the correct relative position
+            appData.fieldConfigs.forEach(f => {
+                f.x = f.x * ratio;
+                f.y = f.y * ratio;
+                f.fontSize = f.fontSize * ratio;
+            });
+            
+            if (appData.templateB64) {
+                renderPDFfromBase64(appData.templateB64);
+            }
+        }
+
+        async function renderPDFfromBase64(b64) {
+            const arrayBuffer = await _base64ToArrayBuffer(b64);
+            const pdf = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
+            
+            const wrapper = document.getElementById('canvas-wrapper');
+            Array.from(wrapper.querySelectorAll('canvas')).forEach(c => c.remove());
+            
+            pageDims = [];
+            
+            for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+                const page = await pdf.getPage(pageNum);
+                const viewport = page.getViewport({ scale: currentPdfScale });
+                
+                const canvas = document.createElement('canvas');
+                canvas.className = `bg-white shadow-xl ${pageNum < pdf.numPages ? 'mb-4' : ''}`;
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                wrapper.insertBefore(canvas, document.getElementById('fields-container'));
+                
+                await page.render({ canvasContext: canvas.getContext('2d'), viewport: viewport }).promise;
+                
+                pageDims.push({ 
+                    width: viewport.width, 
+                    height: viewport.height, 
+                    marginBottom: pageNum < pdf.numPages ? 16 : 0 // 16px is mb-4
+                });
+            }
+            
+            document.getElementById('pdf-placeholder').classList.add('hidden');
+            document.getElementById('pdf-settings').classList.remove('hidden');
+            
+            document.getElementById('fields-container').innerHTML = '';
+            // Re-render fields based on visual coordinates
+            appData.fieldConfigs.forEach(f => {
+                createDraggableDiv(f.id, f.columnName, f.x, f.y, f.fontSize, f.color || '#000000');
+            });
+            renderFieldList();
+        }
+
+        function addFieldToCanvas() {
+            const col = document.getElementById('column-selector').value;
+            if(!col) return;
+            const size = document.getElementById('global-font-size').value || 24;
+            const color = document.getElementById('global-font-color').value || '#000000';
+            
+            const field = { id: Date.now(), columnName: col, x: 50, y: 50, fontSize: Number(size), color: color };
+            appData.fieldConfigs.push(field);
+            createDraggableDiv(field.id, field.columnName, field.x, field.y, field.fontSize, field.color);
+            renderFieldList();
+        }
+
+        function createDraggableDiv(id, col, x, y, size, color) {
+            const div = document.createElement('div');
+            div.className = 'draggable-field shadow-sm pointer-events-auto';
+            div.id = `field-${id}`;
+            div.style.left = `${x}px`;
+            div.style.top = `${y}px`;
+            div.style.fontSize = `${size}px`;
+            div.style.color = color;
+            div.style.borderColor = color;
+            div.textContent = `{${col}}`;
+            
+            div.onmousedown = (e) => {
+                const fieldObj = appData.fieldConfigs.find(f => f.id === id);
+                activeDragField = { element: div, fieldObj: fieldObj };
+                startX = e.clientX - div.offsetLeft;
+                startY = e.clientY - div.offsetTop;
+            };
+            
+            document.getElementById('fields-container').appendChild(div);
+        }
+
+        document.addEventListener('mousemove', (e) => {
+            if(!activeDragField) return;
+            // Bound to container optionally
+            const newX = e.clientX - startX;
+            const newY = e.clientY - startY;
+            activeDragField.element.style.left = `${newX}px`;
+            activeDragField.element.style.top = `${newY}px`;
+            activeDragField.fieldObj.x = Math.round(newX);
+            activeDragField.fieldObj.y = Math.round(newY);
+        });
+        document.addEventListener('mouseup', () => { activeDragField = null; });
+
+        function removeField(id) {
+            appData.fieldConfigs = appData.fieldConfigs.filter(f => f.id !== id);
+            const domNode = document.getElementById(`field-${id}`);
+            if(domNode) domNode.remove();
+            renderFieldList();
+        }
+
+        function renderFieldList() {
+            const list = document.getElementById('field-list');
+            list.innerHTML = appData.fieldConfigs.map(f => `
+                <div class="flex justify-between items-center bg-white p-2 border rounded text-sm mt-2 shadow-sm pointer-events-auto">
+                    <div class="flex items-center space-x-2">
+                        <div style="width:16px;height:16px;border-radius:50%;background-color:${f.color || '#000000'};border:1px solid #ccc;"></div>
+                        <span><strong>${f.columnName}</strong> (Size ${f.fontSize}px)</span>
+                    </div>
+                    <button class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-1 rounded" onclick="removeField(${f.id})"><i class="fas fa-trash"></i></button>
+                </div>
+            `).join('');
+        }
+
+        function saveTemplateSettings() {
+            try {
+                localStorage.setItem('invite_fields', JSON.stringify(appData.fieldConfigs));
+                alert('Layout settings mapped and saved to Local Storage!');
+            } catch (err) {
+                console.warn("Layout too complex to save locally", err);
+                alert("Layout settings temporarily saved for this session!");
+            }
+        }
+
+        // --- 4. PDF Synthesis & WhatsApp Module ---
+        async function loadContactsList() {
+            const tbody = document.getElementById('contacts-list-body');
+            
+            if(appData.contacts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-8 text-gray-500">No contacts loaded. Upload Data First.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = appData.contacts.map(c => {
+                const statusColor = c._status === 'Sent' ? 'text-green-600 bg-green-100' : 'text-orange-600 bg-orange-100';
+                return `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${c._name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${c._number}</td>
+                        <td class="px-6 py-4 whitespace-nowrap"><span class="px-2 py-1 rounded-full text-xs font-semibold ${statusColor}" id="status-${c._id}">${c._status}</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm">
+                            <button class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded shadow-sm transition-colors text-xs" onclick="generateAndShare(${c._id}, '${c._number}')">
+                                <i class="fab fa-whatsapp mr-1"></i> Generate & Send
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        async function generateAndShare(contactId, phoneNumber) {
+            if(!appData.templateB64) {
+                alert("Please upload a PDF Template first!");
+                return;
+            }
+
+            const btn = event.currentTarget;
+            const originalHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+            btn.disabled = true;
+
+            const hexToRgbVals = (hex) => {
+                const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+                return result ? { r: parseInt(result[1], 16)/255, g: parseInt(result[2], 16)/255, b: parseInt(result[3], 16)/255 } : { r:0, g:0, b:0 };
+            };
+
+            try {
+                // 1. Initialize pdf-lib
+                const PDFDocument = PDFLib.PDFDocument;
+                const rgb = PDFLib.rgb;
+                
+                // 2. Load template document
+                const arrayBuffer = await _base64ToArrayBuffer(appData.templateB64);
+                const pdfDoc = await PDFDocument.load(arrayBuffer);
+                const pages = pdfDoc.getPages();
+                
+                // Find contact data
+                const contact = appData.contacts.find(c => c._id === contactId);
+
+                // 3. Render each dynamic field onto the PDF natively in-browser
+                for (const field of appData.fieldConfigs) {
+                    const value = contact[field.columnName];
+                    if (value) {
+                        const pdfScale = currentPdfScale;
+                        
+                        // Find which page the field falls into
+                        let currentY = 0;
+                        let targetPageIndex = 0;
+                        let yOffsetInPage = 0;
+
+                        for (let i = 0; i < pageDims.length; i++) {
+                            const pageTotalHeight = pageDims[i].height + pageDims[i].marginBottom;
+                            // Add extra tolerance in case `field.y` exactly matches lower bounds.
+                            if (field.y < currentY + pageTotalHeight || i === pageDims.length - 1) {
+                                targetPageIndex = i;
+                                yOffsetInPage = field.y - currentY;
+                                break;
+                            }
+                            currentY += pageTotalHeight;
+                        }
+
+                        if (targetPageIndex >= pages.length) targetPageIndex = pages.length - 1;
+
+                        const targetPage = pages[targetPageIndex];
+                        const { width, height } = targetPage.getSize();
+                        
+                        const actualX = field.x / pdfScale;
+                        const actualY = height - (yOffsetInPage / pdfScale) - (field.fontSize / pdfScale);
+                        const col = hexToRgbVals(field.color || '#000000');
+
+                        targetPage.drawText(value, {
+                            x: actualX,
+                            y: actualY,
+                            size: field.fontSize / pdfScale,
+                            color: rgb(col.r, col.g, col.b),
+                        });
+                    }
+                }
+
+                // 4. Serialize the PDFDocument to bytes
+                const pdfBytes = await pdfDoc.save();
+                
+                // 5. Package as Blob/File payload
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const fileName = `Invitation_${contact._name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+                const file = new File([blob], fileName, { type: 'application/pdf' });
+                
+                const customMessage = document.getElementById('whatsapp-message').value || "Here is your personalized invitation!";
+                const sendMode = document.querySelector('input[name="sendMode"]:checked').value;
+
+                // 6. Share seamlessly via OS API or Desktop Download + WhatsApp Web trigger
+                if (sendMode === 'autoAttach' && navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Your Personalized Invitation',
+                        text: customMessage
+                    });
+                    console.log('Shared successfully via Native OS API');
+                } else {
+                    // Desktop fallback OR Forced Direct Chat on Mobile: Download file immediately
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    
+                    // Boot up WhatsApp web in another tab or Native App seamlessly without popup blockers
+                    const waNum = phoneNumber.replace(/[^0-9]/g, '');
+                    // On Mobile, wa.me auto-opens the Native App to the exact chat. On Desktop, it opens Web WhatsApp.
+                    const waUrl = `https://wa.me/${waNum}?text=${encodeURIComponent(customMessage + "\n\n(I have attached your PDF Invitation)")}`;
+                    window.location.href = waUrl;
+                }
+                
+                // 7. Success state recording locally
+                contact._status = 'Sent';
+                localStorage.setItem('invite_contacts', JSON.stringify(appData.contacts));
+
+                btn.innerHTML = '<i class="fas fa-check"></i> Processed';
+                btn.classList.replace('bg-blue-600', 'bg-green-600');
+                
+                document.getElementById(`status-${contact._id}`).className = 'px-2 py-1 rounded-full text-xs font-semibold text-green-600 bg-green-100';
+                document.getElementById(`status-${contact._id}`).textContent = 'Sent';
+                fetchStats();
+            } catch (err) {
+                console.error('Core processing failed:', err);
+                alert("Failed to process or action was cancelled.");
+                btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i> Generate & Send';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
