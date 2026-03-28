@@ -338,9 +338,14 @@
         }
 
         // --- 3. Layout Engine Module ---
-        async function _base64ToArrayBuffer(base64) {
-            const res = await fetch("data:application/pdf;base64," + base64);
-            return await res.arrayBuffer();
+        function _base64ToArrayBuffer(base64) {
+            var binary_string = window.atob(base64);
+            var len = binary_string.length;
+            var bytes = new Uint8Array(len);
+            for (var i = 0; i < len; i++) {
+                bytes[i] = binary_string.charCodeAt(i);
+            }
+            return bytes.buffer;
         }
 
         function handlePDFUpload(event) {
@@ -386,7 +391,7 @@
         }
 
         async function renderPDFfromBase64(b64) {
-            const arrayBuffer = await _base64ToArrayBuffer(b64);
+            const arrayBuffer = _base64ToArrayBuffer(b64);
             const pdf = await pdfjsLib.getDocument(new Uint8Array(arrayBuffer)).promise;
             
             const wrapper = document.getElementById('canvas-wrapper');
@@ -548,7 +553,7 @@
                 const rgb = PDFLib.rgb;
                 
                 // 2. Load template document
-                const arrayBuffer = await _base64ToArrayBuffer(appData.templateB64);
+                const arrayBuffer = _base64ToArrayBuffer(appData.templateB64);
                 const pdfDoc = await PDFDocument.load(arrayBuffer);
                 const pages = pdfDoc.getPages();
                 
@@ -643,7 +648,7 @@
                 fetchStats();
             } catch (err) {
                 console.error('Core processing failed:', err);
-                alert("Failed to process or action was cancelled.");
+                alert("Failed to process or action was cancelled.\nReason: " + (err.message || err));
                 btn.innerHTML = '<i class="fab fa-whatsapp mr-1"></i> Generate & Send';
                 btn.disabled = false;
             }
